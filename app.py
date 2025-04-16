@@ -5,14 +5,24 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from datetime import datetime
 import pytz
+import pymysql
+pymysql.install_as_MySQLdb()
+
+user = os.environ.get("DB_USER")
+pwd = os.environ.get("DB_PASSWORD")
+host = os.environ.get("DB_HOST")
+name = os.environ.get("DB_NAME")
+
+
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite3'
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default-secret')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI')
+app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER')
+
 
 db = SQLAlchemy(app)
-socketio = SocketIO(app)
+socketio =  SocketIO(app, async_mode='eventlet')
 
 # -------------------- Models --------------------
 class User(db.Model):
@@ -32,7 +42,7 @@ class Message(db.Model):
 @app.route('/')
 def index():
     if 'username' in session:
-        return redirect(('/chat'))
+        return redirect(url_for('chat'))
     return render_template('login.html')
 
 @app.route('/login', methods=['POST'])
@@ -42,7 +52,7 @@ def login():
     user = User.query.filter_by(username=username.capitalize()).first()
     if user and check_password_hash(user.password, password):
         session['username'] = username.capitalize()
-        return redirect(('/chat'))
+        return redirect(url_for('chat'))
     return 'Invalid credentials'
 
 @app.route('/signup', methods=['GET', 'POST'])
@@ -55,13 +65,13 @@ def signup():
         user = User(username=username.capitalize(), password=password)
         db.session.add(user)
         db.session.commit()
-        return redirect(('/ '))
+        return redirect(url_for('index'))
     return render_template('signup.html')
 
 @app.route('/chat')
 def chat():
     if 'username' not in session:
-        return redirect(('/ '))
+        return redirect(url_for('index'))
 
     current_user = session['username']
     users = User.query.filter(User.username != current_user).order_by(User.username).all()
@@ -115,7 +125,7 @@ def mark_read():
 @app.route('/logout')
 def logout():
     session.pop('username', None)
-    return redirect(('/ '))
+    return redirect(url_for('index'))
 
 # -------------------- SocketIO Events --------------------
 @socketio.on('message')
@@ -149,8 +159,7 @@ def handle_message(msg):
     
 # -------------------- Main --------------------
 if __name__ == '__main__':
-    if not os.path.exists('db.sqlite3'):
-        with app.app_context():
-            db.create_all()
-    socketio.run(app, debug=True)
- 
+    with app.app_context():
+        db.create_all()
+    socketio.run(app, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)), debug=False)
+
