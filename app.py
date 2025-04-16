@@ -55,13 +55,13 @@ def signup():
         user = User(username=username.capitalize(), password=password)
         db.session.add(user)
         db.session.commit()
-        return redirect(('/'))
+        return redirect(('/ '))
     return render_template('signup.html')
 
 @app.route('/chat')
 def chat():
     if 'username' not in session:
-        return redirect(('/'))
+        return redirect(('/ '))
 
     current_user = session['username']
     users = User.query.filter(User.username != current_user).order_by(User.username).all()
@@ -89,7 +89,7 @@ def get_messages(receiver_username):
         "sender": m.sender,
         "receiver": m.receiver,
         "text": m.text,
-        "time": m.timestamp.strftime('%I:%M %p'),
+        "time": m.timestamp.strftime('%d/%m/%Y - %I:%M %p'),
         "is_read": m.is_read
     } for m in messages]
 
@@ -115,7 +115,7 @@ def mark_read():
 @app.route('/logout')
 def logout():
     session.pop('username', None)
-    return redirect(('/'))
+    return redirect(('/ '))
 
 # -------------------- SocketIO Events --------------------
 @socketio.on('message')
@@ -135,7 +135,7 @@ def handle_message(msg):
     db.session.add(message)
     db.session.commit()
 
-    formatted_time = current_time.strftime("%I:%M %p")
+    formatted_time = current_time.strftime('%d/%m/%Y - %I:%M %p')
 
     # Send message to all connected clients
     send({
