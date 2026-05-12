@@ -1,18 +1,18 @@
 runtime: custom
 env: flex
- 
+
 entrypoint: gunicorn -k eventlet -b :$PORT app:app
 
-instance_class: F1 
+instance_class: F1
 
 env_variables:
-  SECRET_KEY: '4f9d2c7c8aa54d12b937f9c7f9d23c6a1234567890abcdef1234567890abcdef'
-  DB_USER: 'messenger'
-  DB_PASSWORD: 'asd@00'
-  DB_HOST: '34.93.166.255'
-  DB_NAME: 'messenger'
-  SQLALCHEMY_DATABASE_URI: 'mysql+pymysql://messenger:asd%4000@34.93.166.255:3306/messenger' 
-  UPLOAD_FOLDER: 'static/uploads'
+  SECRET_KEY: ${SECRET_KEY}
+  DB_USER: ${DB_USER}
+  DB_PASSWORD: ${DB_PASSWORD}
+  DB_HOST: ${DB_HOST}
+  DB_NAME: ${DB_NAME}
+  SQLALCHEMY_DATABASE_URI: ${SQLALCHEMY_DATABASE_URI}
+  UPLOAD_FOLDER: static/uploads
 
 handlers:
 - url: /static
@@ -20,8 +20,6 @@ handlers:
 
 - url: /.*
   script: auto
-
-
 
 resources:
   cpu: 1
@@ -32,5 +30,6 @@ automatic_scaling:
   min_num_instances: 1
   max_num_instances: 3
   cool_down_period_sec: 90
+
   cpu_utilization:
     target_utilization: 0.65
