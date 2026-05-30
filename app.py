@@ -1,28 +1,29 @@
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify
-from flask_socketio import SocketIO, send
+from flask_socketio import (
+    SocketIO,
+    emit,
+    join_room,
+    leave_room
+)
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from datetime import datetime
 import pytz
-import pymysql
-pymysql.install_as_MySQLdb()
-
-user = os.environ.get("DB_USER")
-pwd = os.environ.get("DB_PASSWORD")
-host = os.environ.get("DB_HOST")
-name = os.environ.get("DB_NAME")
-
-
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default-secret')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI')
-app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER')
-
+app.config['SECRET_KEY'] = 'your-secret-key'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite3'
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
 
 db = SQLAlchemy(app)
-socketio =  SocketIO(app, async_mode='eventlet')
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*"
+)
+
+
+online_users = set()
 
 # -------------------- Models --------------------
 class User(db.Model):
@@ -42,7 +43,7 @@ class Message(db.Model):
 @app.route('/')
 def index():
     if 'username' in session:
-        return redirect(url_for('chat'))
+        return redirect(('/chat'))
     return render_template('login.html')
 
 @app.route('/login', methods=['POST'])
@@ -52,7 +53,7 @@ def login():
     user = User.query.filter_by(username=username.capitalize()).first()
     if user and check_password_hash(user.password, password):
         session['username'] = username.capitalize()
-        return redirect(url_for('chat'))
+        return redirect(('/chat'))
     return 'Invalid credentials'
 
 @app.route('/signup', methods=['GET', 'POST'])
@@ -65,13 +66,13 @@ def signup():
         user = User(username=username.capitalize(), password=password)
         db.session.add(user)
         db.session.commit()
-        return redirect(url_for('index'))
+        return redirect(('/'))
     return render_template('signup.html')
 
 @app.route('/chat')
 def chat():
     if 'username' not in session:
-        return redirect(url_for('index'))
+        return redirect(('/'))
 
     current_user = session['username']
     users = User.query.filter(User.username != current_user).order_by(User.username).all()
@@ -99,7 +100,7 @@ def get_messages(receiver_username):
         "sender": m.sender,
         "receiver": m.receiver,
         "text": m.text,
-        "time": m.timestamp.strftime('%d/%m/%Y - %I:%M %p'),
+        "time": m.timestamp.strftime('%I:%M %p'),
         "is_read": m.is_read
     } for m in messages]
 
@@ -120,46 +121,109 @@ def mark_read():
         msg.is_read = True
 
     db.session.commit()
+    socketio.emit(
+        'messages_read',
+        {
+            'reader': receiver,
+            'sender': sender
+        },
+        room=sender
+    )
     return jsonify({"status": "success", "read_count": len(unread_msgs)})
 
 @app.route('/logout')
 def logout():
     session.pop('username', None)
-    return redirect(url_for('index'))
+    return redirect(('/'))
 
 # -------------------- SocketIO Events --------------------
+@socketio.on('join')
+def handle_join(data):
+    username = data.get('username')
+
+    if not username:
+        return
+
+    join_room(username)
+
+    online_users.add(username)
+
+    emit(
+        'status',
+        {
+            'user': username,
+            'online': True
+        },
+        broadcast=True
+    )
+
+@socketio.on('disconnect')
+def handle_disconnect():
+
+    username = session.get('username')
+
+    if username and username in online_users:
+
+        online_users.remove(username)
+
+        emit(
+            'status',
+            {
+                'user': username,
+                'online': False
+            },
+            broadcast=True
+        )
+
 @socketio.on('message')
 def handle_message(msg):
-    username = session.get('username', 'Unknown')
+
+    username = session.get('username')
+
     receiver = msg.get('receiver')
     text = msg.get('text')
 
-    if not text or not receiver:
-        return  # don't process incomplete messages
+    if not username or not receiver or not text:
+        return
 
     india_tz = pytz.timezone('Asia/Kolkata')
     current_time = datetime.now(india_tz)
 
-    # Save to database
-    message = Message(sender=username, receiver=receiver, text=text, timestamp=current_time, is_read=False)
+    message = Message(
+        sender=username,
+        receiver=receiver,
+        text=text,
+        timestamp=current_time,
+        is_read=False
+    )
+
     db.session.add(message)
     db.session.commit()
 
-    formatted_time = current_time.strftime('%d/%m/%Y - %I:%M %p')
-
-    # Send message to all connected clients
-    send({
+    payload = {
         'sender': username,
         'receiver': receiver,
         'text': text,
-        'time': formatted_time,
+        'time': current_time.strftime('%I:%M %p'),
         'is_read': False
-    }, broadcast=True)
+    }
+
+    emit('message', payload, room=username)
+    emit('message', payload, room=receiver)
+
+    emit(
+        'new_unread',
+        {
+            'sender': username
+        },
+        room=receiver
+    )
  
     
 # -------------------- Main --------------------
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    socketio.run(app, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)), debug=False)
-
+    if not os.path.exists('db.sqlite3'):
+        with app.app_context():
+            db.create_all()
+    socketio.run(app, debug=True)
+ 

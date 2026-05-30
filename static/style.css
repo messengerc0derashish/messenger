@@ -37,6 +37,18 @@ body::before {
 /* ====================== */
 /* === TYPOGRAPHY ======= */
 /* ====================== */
+h1 img {
+    height: 40px
+}
+
+h1 {
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
 h2 {
     font-weight: bold;
     color: #000;
@@ -139,7 +151,7 @@ button:hover {
 /* === SIDEBAR ========= */
 /* ====================== */
 .chat-wrapper .sidebar {
-    width: 30%;
+    width: 40%;
     min-width: 200px;
     background: #fafafa;
     padding: 20px;
@@ -149,7 +161,7 @@ button:hover {
 
 .chat-wrapper .chat-list {
     overflow-y: auto;
-    max-height: calc(70vh - 140px);
+    max-height: calc(60vh - 140px);
 }
 
 #clogo {
@@ -677,6 +689,14 @@ body.dark-mode .messages::-webkit-scrollbar-thumb:hover {
 
 .icl {
     display: none;
+}
+
+@media (max-width: 768px) {
+    .chat-container {
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 0 !important;
+    }
 }
 
 @media (max-width: 550px) {

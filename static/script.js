@@ -1,5 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
+    socket.emit('join', {
+        username: username
+    });
     const form = document.getElementById('chat-form');
     const input = document.getElementById('message');
     const chatBox = document.getElementById('chat-box');
@@ -56,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(res => res.json())
             .then(data => {
                 console.log("Marked as read:", data.read_count);
+                // You could also update the UI badge here
                 item.querySelector('.unseen')?.remove();
             });
 
@@ -63,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(res => res.json())
             .then(data => {
                 if (data.status === 'success') {
-                    chatBox.innerHTML = '';
+                    chatBox.innerHTML = '';  // Clear previous messages
 
                     data.messages.forEach(msg => {
                         const msgEl = createMessageElement(msg);
@@ -87,22 +91,81 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // === Socket.io Message Handler ===
     socket.on('message', function (msg) {
-        if ((msg.sender === username && msg.receiver === receiver) ||
-            (msg.sender === receiver && msg.receiver === username)) {
-            const messageElement = createMessageElement(msg);
+
+        if (
+            (msg.sender === username && msg.receiver === receiver) ||
+            (msg.sender === receiver && msg.receiver === username)
+        ) {
+
+            const messageElement =
+                createMessageElement(msg);
+
             chatBox.appendChild(messageElement);
-            chatBox.scrollTop = chatBox.scrollHeight;
+
+            chatBox.scrollTop =
+                chatBox.scrollHeight;
+        }
+    });
+
+    socket.on('new_unread', (data) => {
+
+        if (receiver === data.sender) {
+            return;
         }
 
-        if (msg.sender === receiver || msg.receiver === receiver) {
-            const target = document.querySelector(`.chat-item[data-username="${msg.sender}"] .unseen span`);
-            if (target) {
-                target.textContent = parseInt(target.textContent) + 1;
-            } else {
-                const span = document.createElement('span');
-                span.textContent = 1;
-                document.querySelector(`.chat-item[data-username="${msg.sender}"] .unseen`)?.appendChild(span);
-            }
+        const item = document.querySelector(
+            `.chat-item[data-username="${data.sender}"]`
+        );
+
+        if (!item) return;
+
+        let badge = item.querySelector('.unseen span');
+
+        if (badge) {
+
+            badge.textContent =
+                parseInt(badge.textContent) + 1;
+
+        } else {
+
+            const unseen =
+                document.createElement('div');
+
+            unseen.classList.add('unseen');
+
+            const span =
+                document.createElement('span');
+
+            span.textContent = '1';
+
+            unseen.appendChild(span);
+
+            item.appendChild(unseen);
+        }
+    });
+
+    socket.on('messages_read', (data) => {
+        console.log(
+            `${data.reader} read messages`
+        );
+    });
+
+    socket.on('status', (data) => {
+
+        const user =
+            document.querySelector(
+                `.chat-item[data-username="${data.user}"]`
+            );
+
+        if (!user) return;
+
+        if (data.online) {
+
+            user.classList.add('online');
+
+        } else {
+
+            user.classList.remove('online');
         }
     });
 
@@ -155,8 +218,3 @@ messageInput.addEventListener('focus', () => {
         messageInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 300);
 });
-
-
-setInterval(() => {
-    location.reload();
-}, 90000);
